@@ -45,7 +45,16 @@ export const profileSchema = z.object({
     .max(36, 'Keep your display name under 36 characters.'),
 });
 
+export const inviteCodeSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase().replace(/[^A-Z0-9]/g, ''))
+    .refine((value) => value.length === 6, 'Invite codes are 6 characters.'),
+});
+
 export type EmailAuthFormValues = z.input<typeof emailAuthSchema>;
+export type InviteCodeValues = z.input<typeof inviteCodeSchema>;
 export type PhoneCodeValues = z.input<typeof phoneCodeSchema>;
 export type PhoneRequestValues = z.input<typeof phoneRequestSchema>;
 export type ProfileFormValues = z.input<typeof profileSchema>;

@@ -21,6 +21,7 @@ type AuthContextValue = {
   isConfigured: boolean;
   isReady: boolean;
   profile: Profile | null;
+  refreshProfile: () => Promise<void>;
   session: Session | null;
   saveProfile: (values: ProfileFormValues) => Promise<AuthResult>;
   sendPhoneOtp: (phone: string) => Promise<PhoneAuthResult>;
@@ -50,6 +51,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const nextProfile = await loadOrSeedProfile(user);
     setProfile(nextProfile);
   }, []);
+
+  const refreshProfile = React.useCallback(async () => {
+    await syncProfile(session?.user ?? null);
+  }, [session?.user, syncProfile]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -268,6 +273,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isConfigured: hasSupabaseCredentials,
       isReady,
       profile,
+      refreshProfile,
       saveProfile,
       sendPhoneOtp,
       session,
@@ -277,7 +283,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signUpWithEmail,
       verifyPhoneOtp,
     }),
-    [isBusy, isReady, profile, session],
+    [isBusy, isReady, profile, refreshProfile, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

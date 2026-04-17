@@ -3,11 +3,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton, Screen, SurfaceCard } from '@/components/ui';
 import { useAuth } from '@/context/auth';
+import { useRelationship } from '@/context/relationship';
 import { colors, spacing } from '@/theme/tokens';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { profile, session, signOut } = useAuth();
+  const { couple, relationshipState } = useRelationship();
 
   return (
     <Screen>
@@ -32,6 +34,14 @@ export default function SettingsScreen() {
         <View style={styles.row}>
           <Text style={styles.label}>Phone</Text>
           <Text style={styles.value}>{session?.user.phone ?? 'Not connected'}</Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={styles.label}>Relationship state</Text>
+          <Text style={styles.value}>{relationshipState}</Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={styles.label}>Shared timezone</Text>
+          <Text style={styles.value}>{couple?.timezone ?? 'Not linked yet'}</Text>
         </View>
       </SurfaceCard>
 
