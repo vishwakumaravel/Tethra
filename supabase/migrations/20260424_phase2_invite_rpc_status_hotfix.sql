@@ -1,61 +1,3 @@
-create table if not exists public.invite_code_audit (
-  code text primary key,
-  couple_id uuid references public.couples (id) on delete cascade,
-  owner_id uuid not null references public.profiles (id) on delete cascade,
-  invalidated_reason text not null check (invalidated_reason in ('expired', 'removed', 'reused')),
-  invalidated_at timestamptz not null default timezone('utc', now())
-);
-
-alter table public.profiles
-add column if not exists current_couple_id uuid references public.couples (id) on delete set null;
-
-alter table public.couples
-add column if not exists timezone text not null default 'UTC';
-
-alter table public.couples
-add column if not exists invite_code text;
-
-alter table public.couples
-add column if not exists invite_expires_at timestamptz;
-
-alter table public.couples
-add column if not exists linked_at timestamptz;
-
-create index if not exists idx_profiles_current_couple_id on public.profiles (current_couple_id);
-create index if not exists idx_couples_participants on public.couples (user_1_id, user_2_id);
-create unique index if not exists idx_couples_active_pending_inviter
-on public.couples (user_1_id)
-where status = 'pending';
-
-create unique index if not exists idx_couples_active_pending_code
-on public.couples (invite_code)
-where status = 'pending' and invite_code is not null;
-
-alter table public.couples
-drop constraint if exists couples_invite_code_format;
-
-alter table public.couples
-add constraint couples_invite_code_format
-check (invite_code is null or invite_code ~ '^[A-Z0-9]{6}$');
-
-create or replace function public.normalize_tethra_timezone(requested_timezone text)
-returns text
-language plpgsql
-stable
-as $$
-begin
-  if requested_timezone is null or btrim(requested_timezone) = '' then
-    return 'UTC';
-  end if;
-
-  if exists (select 1 from pg_timezone_names where name = requested_timezone) then
-    return requested_timezone;
-  end if;
-
-  return 'UTC';
-end;
-$$;
-
 create or replace function public.generate_tethra_invite_code()
 returns text
 language plpgsql
@@ -80,8 +22,8 @@ begin
         and c.invite_code is not null
     ) and not exists (
       select 1
-      from public.invite_code_audit
-      where code = candidate
+      from public.invite_code_audit a
+      where a.code = candidate
     );
   end loop;
 
@@ -115,7 +57,7 @@ declare
   next_code text;
 begin
   if viewer_id is null then
-    return query select false, 'unknown', 'You need to be signed in first.', null::uuid, null::text, null::text, null::timestamptz, null::text;
+    return query select false, 'unknown'::text, 'You need to be signed in first.'::text, null::uuid, null::text, null::text, null::timestamptz, null::text;
     return;
   end if;
 
@@ -125,7 +67,7 @@ begin
   where p.id = viewer_id;
 
   if linked_couple_id is not null then
-    return query select false, 'already_linked', 'You are already linked with a partner.', linked_couple_id, 'linked', null::text, null::timestamptz, null::text;
+    return query select false, 'already_linked'::text, 'You are already linked with a partner.'::text, linked_couple_id, 'linked'::text, null::text, null::timestamptz, null::text;
     return;
   end if;
 
@@ -148,7 +90,7 @@ begin
       end if;
     elsif not regenerate then
       return query
-      select true, 'invite_exists', 'You already have an active invite.', existing_pending.id, existing_pending.status::text, existing_pending.invite_code, existing_pending.invite_expires_at, existing_pending.timezone;
+      select true, 'invite_exists'::text, 'You already have an active invite.'::text, existing_pending.id, existing_pending.status::text, existing_pending.invite_code, existing_pending.invite_expires_at, existing_pending.timezone;
       return;
     else
       if existing_pending.invite_code is not null then
@@ -170,7 +112,7 @@ begin
     where id = viewer_id;
 
     return query
-    select true, null::text, null::text, existing_pending.id, 'pending', next_code, (now() + interval '24 hours')::timestamptz, normalized_timezone;
+    select true, null::text, null::text, existing_pending.id, 'pending'::text, next_code, (now() + interval '24 hours')::timestamptz, normalized_timezone;
     return;
   end if;
 
@@ -183,7 +125,7 @@ begin
   where id = viewer_id;
 
   return query
-  select true, null::text, null::text, linked_couple_id, 'pending', next_code, (now() + interval '24 hours')::timestamptz, normalized_timezone;
+  select true, null::text, null::text, linked_couple_id, 'pending'::text, next_code, (now() + interval '24 hours')::timestamptz, normalized_timezone;
 end;
 $$;
 
@@ -207,27 +149,26 @@ declare
   normalized_code text := upper(trim(join_couple_by_code.code));
   target_couple public.couples%rowtype;
   viewer_profile public.profiles%rowtype;
-  partner_id uuid;
   audit_reason text;
 begin
   if viewer_id is null then
-    return query select false, 'unknown', 'You need to be signed in first.', null::uuid, null::text, null::text, null::timestamptz, null::text;
+    return query select false, 'unknown'::text, 'You need to be signed in first.'::text, null::uuid, null::text, null::text, null::timestamptz, null::text;
     return;
   end if;
 
   if normalized_code !~ '^[A-Z0-9]{6}$' then
-    return query select false, 'invalid_code', 'That invite code does not look right.', null::uuid, null::text, null::text, null::timestamptz, null::text;
+    return query select false, 'invalid_code'::text, 'That invite code does not look right.'::text, null::uuid, null::text, null::text, null::timestamptz, null::text;
     return;
   end if;
 
   select *
   into viewer_profile
-  from public.profiles
-  where id = viewer_id
+  from public.profiles p
+  where p.id = viewer_id
   for update;
 
   if viewer_profile.current_couple_id is not null then
-    return query select false, 'already_linked', 'You are already linked with a partner.', viewer_profile.current_couple_id, 'linked', null::text, null::timestamptz, null::text;
+    return query select false, 'already_linked'::text, 'You are already linked with a partner.'::text, viewer_profile.current_couple_id, 'linked'::text, null::text, null::timestamptz, null::text;
     return;
   end if;
 
@@ -237,7 +178,7 @@ begin
     where c.user_1_id = viewer_id
       and c.status = 'pending'
   ) then
-    return query select false, 'invite_exists', 'Cancel your current invite before joining another one.', null::uuid, 'pending', null::text, null::timestamptz, null::text;
+    return query select false, 'invite_exists'::text, 'Cancel your current invite before joining another one.'::text, null::uuid, 'pending'::text, null::text, null::timestamptz, null::text;
     return;
   end if;
 
@@ -251,7 +192,7 @@ begin
 
   if found then
     if target_couple.user_1_id = viewer_id then
-      return query select false, 'self_join', 'You cannot join your own invite code.', target_couple.id, target_couple.status::text, target_couple.invite_code, target_couple.invite_expires_at, target_couple.timezone;
+      return query select false, 'self_join'::text, 'You cannot join your own invite code.'::text, target_couple.id, target_couple.status::text, target_couple.invite_code, target_couple.invite_expires_at, target_couple.timezone;
       return;
     end if;
 
@@ -272,7 +213,7 @@ begin
       set partner_status = 'unlinked'
       where id = target_couple.user_1_id;
 
-      return query select false, 'expired_code', 'That invite code has expired. Ask your partner for a new one.', target_couple.id, 'pending', null::text, null::timestamptz, target_couple.timezone;
+      return query select false, 'expired_code'::text, 'That invite code has expired. Ask your partner for a new one.'::text, target_couple.id, 'pending'::text, null::text, null::timestamptz, target_couple.timezone;
       return;
     end if;
 
@@ -294,30 +235,30 @@ begin
         partner_status = 'linked'
     where id in (viewer_id, target_couple.user_1_id);
 
-    return query select true, null::text, null::text, target_couple.id, 'linked', null::text, null::timestamptz, target_couple.timezone;
+    return query select true, null::text, null::text, target_couple.id, 'linked'::text, null::text, null::timestamptz, target_couple.timezone;
     return;
   end if;
 
-  select invalidated_reason
+  select a.invalidated_reason
   into audit_reason
-  from public.invite_code_audit
-  where code = normalized_code;
+  from public.invite_code_audit a
+  where a.code = normalized_code;
 
   if audit_reason is not null then
     return query
     select false,
-      case audit_reason
+      (case audit_reason
         when 'expired' then 'expired_code'
         when 'removed' then 'removed_code'
         when 'reused' then 'reused_code'
         else 'invalid_code'
-      end,
-      case audit_reason
+      end)::text,
+      (case audit_reason
         when 'expired' then 'That invite code has expired. Ask your partner for a new one.'
         when 'removed' then 'That invite code is no longer active.'
         when 'reused' then 'That invite code has already been used.'
         else 'That invite code is not valid.'
-      end,
+      end)::text,
       null::uuid,
       null::text,
       null::text,
@@ -326,7 +267,7 @@ begin
     return;
   end if;
 
-  return query select false, 'invalid_code', 'That invite code is not valid.', null::uuid, null::text, null::text, null::timestamptz, null::text;
+  return query select false, 'invalid_code'::text, 'That invite code is not valid.'::text, null::uuid, null::text, null::text, null::timestamptz, null::text;
 end;
 $$;
 
@@ -350,7 +291,7 @@ declare
   pending_couple public.couples%rowtype;
 begin
   if viewer_id is null then
-    return query select false, 'unknown', 'You need to be signed in first.', null::uuid, null::text, null::text, null::timestamptz, null::text;
+    return query select false, 'unknown'::text, 'You need to be signed in first.'::text, null::uuid, null::text, null::text, null::timestamptz, null::text;
     return;
   end if;
 
@@ -363,7 +304,7 @@ begin
   for update;
 
   if not found then
-    return query select false, 'unknown', 'There is no active invite to cancel.', null::uuid, null::text, null::text, null::timestamptz, null::text;
+    return query select false, 'unknown'::text, 'There is no active invite to cancel.'::text, null::uuid, null::text, null::text, null::timestamptz, null::text;
     return;
   end if;
 
@@ -380,27 +321,9 @@ begin
   set partner_status = 'unlinked'
   where id = viewer_id;
 
-  return query select true, null::text, null::text, pending_couple.id, 'pending', null::text, null::timestamptz, pending_couple.timezone;
+  return query select true, null::text, null::text, pending_couple.id, 'pending'::text, null::text, null::timestamptz, pending_couple.timezone;
 end;
 $$;
-
-drop policy if exists "profiles_select_own" on public.profiles;
-create policy "profiles_select_own"
-on public.profiles
-for select
-using (
-  auth.uid() = id
-  or exists (
-    select 1
-    from public.couples c
-    where c.status = 'linked'
-      and (
-        (c.user_1_id = auth.uid() and c.user_2_id = profiles.id)
-        or
-        (c.user_2_id = auth.uid() and c.user_1_id = profiles.id)
-      )
-  )
-);
 
 grant execute on function public.create_couple_invite(boolean, text) to authenticated;
 grant execute on function public.join_couple_by_code(text) to authenticated;

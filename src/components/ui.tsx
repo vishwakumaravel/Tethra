@@ -48,9 +48,9 @@ type TextFieldProps = TextInputProps & {
 export function Screen({ children, scroll = true, contentContainerStyle }: ScreenProps) {
   const content = (
     <View style={styles.canvas}>
-      <View style={styles.orbA} />
-      <View style={styles.orbB} />
-      <View style={styles.orbC} />
+      <View pointerEvents="none" style={styles.orbA} />
+      <View pointerEvents="none" style={styles.orbB} />
+      <View pointerEvents="none" style={styles.orbC} />
       <View style={[styles.content, contentContainerStyle]}>{children}</View>
     </View>
   );
