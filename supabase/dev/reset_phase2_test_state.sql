@@ -19,6 +19,38 @@ begin
     raise exception 'No auth.users matched the supplied emails. Update target_emails first.';
   end if;
 
+  if to_regclass('public.daily_reveals') is not null then
+    delete from public.daily_reveals
+    where couple_id in (
+      select id
+      from public.couples
+      where user_1_id = any(target_ids)
+         or user_2_id = any(target_ids)
+    );
+  end if;
+
+  if to_regclass('public.daily_predictions') is not null then
+    delete from public.daily_predictions
+    where predictor_user_id = any(target_ids)
+       or couple_id in (
+         select id
+         from public.couples
+         where user_1_id = any(target_ids)
+            or user_2_id = any(target_ids)
+       );
+  end if;
+
+  if to_regclass('public.daily_check_ins') is not null then
+    delete from public.daily_check_ins
+    where user_id = any(target_ids)
+       or couple_id in (
+         select id
+         from public.couples
+         where user_1_id = any(target_ids)
+            or user_2_id = any(target_ids)
+       );
+  end if;
+
   delete from public.invite_code_audit
   where owner_id = any(target_ids)
      or couple_id in (

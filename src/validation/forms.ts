@@ -53,6 +53,20 @@ export const inviteCodeSchema = z.object({
     .refine((value) => value.length === 6, 'Invite codes are 6 characters.'),
 });
 
+export const dailyCheckInSchema = z.object({
+  moodScore: z.number().min(1).max(5),
+  optionalText: z.string().trim().max(280, 'Keep this under 280 characters.').optional(),
+  relationshipFeelingScore: z.number().min(1).max(5),
+  stressLevel: z.number().min(1).max(5),
+});
+
+export const dailyPredictionSchema = z.object({
+  predictedMoodScore: z.number().min(1).max(5),
+  predictedRelationshipFeelingScore: z.number().min(1).max(5),
+});
+
+export type DailyCheckInFormValues = z.input<typeof dailyCheckInSchema>;
+export type DailyPredictionFormValues = z.input<typeof dailyPredictionSchema>;
 export type EmailAuthFormValues = z.input<typeof emailAuthSchema>;
 export type InviteCodeValues = z.input<typeof inviteCodeSchema>;
 export type PhoneCodeValues = z.input<typeof phoneCodeSchema>;

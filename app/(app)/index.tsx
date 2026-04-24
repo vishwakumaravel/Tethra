@@ -4,7 +4,9 @@ import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
 import { InlineMessage, PrimaryButton, Screen, SurfaceCard, TextField } from '@/components/ui';
 import { useAuth } from '@/context/auth';
+import { useDailyLoop } from '@/context/daily-loop';
 import { useRelationship } from '@/context/relationship';
+import { DailyStatus } from '@/types/database';
 import { colors, spacing } from '@/theme/tokens';
 
 export default function HomeScreen() {
@@ -12,6 +14,7 @@ export default function HomeScreen() {
   const { profile, session, signOut } = useAuth();
   const { cancelInvite, couple, createInvite, isLoading, joinByCode, lastError, partnerProfile, refreshRelationship, relationshipState } =
     useRelationship();
+  const { currentUserCheckIn, currentUserPrediction, error, localDay, refreshToday, streak, todayReveal, todayStatus } = useDailyLoop();
   const [joinCode, setJoinCode] = React.useState('');
   const [feedback, setFeedback] = React.useState<string | null>(null);
 
@@ -52,10 +55,12 @@ export default function HomeScreen() {
     <Screen>
       <View style={styles.header}>
         <View style={styles.headerCopy}>
-          <Text style={styles.kicker}>PHASE 2</Text>
-          <Text style={styles.title}>Relationship linking is live.</Text>
+          <Text style={styles.kicker}>{relationshipState === 'linked' ? 'PHASE 3A' : 'PHASE 2'}</Text>
+          <Text style={styles.title}>{relationshipState === 'linked' ? "Today's ritual is ready." : 'Relationship linking is live.'}</Text>
           <Text style={styles.subtitle}>
-            Your signed-in home now branches off an explicit relationship state machine instead of a placeholder shell.
+            {relationshipState === 'linked'
+              ? 'Check in, predict your partner, and unlock the reveal when both of you complete the day.'
+              : 'Create an invite code or join your partner to unlock the daily couple loop.'}
           </Text>
         </View>
 
@@ -65,26 +70,17 @@ export default function HomeScreen() {
       </View>
 
       <SurfaceCard accent="rose">
-        <Text style={styles.cardTitle}>Profile summary</Text>
-        <Text style={styles.profileName}>{profile?.display_name ?? 'Unnamed profile'}</Text>
+        <Text style={styles.cardTitle}>{profile?.display_name ?? 'Your profile'}</Text>
         <View style={styles.summaryGrid}>
-          <View style={styles.summaryChip}>
-            <Text style={styles.summaryLabel}>Relationship state</Text>
-            <Text style={styles.summaryValue}>{relationshipState}</Text>
-          </View>
-          <View style={styles.summaryChip}>
-            <Text style={styles.summaryLabel}>Partner status</Text>
-            <Text style={styles.summaryValue}>{profile?.partner_status ?? 'unlinked'}</Text>
-          </View>
-          <View style={styles.summaryChip}>
-            <Text style={styles.summaryLabel}>Auth identity</Text>
-            <Text style={styles.summaryValue}>{session?.user.email ?? session?.user.phone ?? 'Connected'}</Text>
-          </View>
+          <SummaryChip label="Relationship state" value={relationshipState} />
+          <SummaryChip label="Partner" value={partnerProfile?.display_name ?? profile?.partner_status ?? 'unlinked'} />
+          <SummaryChip label="Identity" value={session?.user.email ?? session?.user.phone ?? 'Connected'} />
         </View>
       </SurfaceCard>
 
       {feedback ? <InlineMessage tone="default" text={feedback} /> : null}
       {lastError ? <InlineMessage tone="warning" text={lastError.message} /> : null}
+      {error ? <InlineMessage tone="warning" text={error} /> : null}
 
       {relationshipState === 'unlinked' ? (
         <SurfaceCard accent="ink">
@@ -119,9 +115,7 @@ export default function HomeScreen() {
       {relationshipState === 'invite_sent' ? (
         <SurfaceCard accent="ink">
           <Text style={styles.stateTitle}>Invite sent</Text>
-          <Text style={styles.stateBody}>
-            Your code is live. Share it with your partner, then keep this screen handy while they join from their simulator.
-          </Text>
+          <Text style={styles.stateBody}>Your code is live. Share it with your partner, then keep this screen handy while they join.</Text>
 
           <View style={styles.codeCard}>
             <Text style={styles.codeLabel}>Active code</Text>
@@ -138,38 +132,43 @@ export default function HomeScreen() {
       ) : null}
 
       {relationshipState === 'linked' ? (
-        <SurfaceCard accent="ink">
-          <Text style={styles.stateTitle}>You’re linked</Text>
-          <Text style={styles.stateBody}>
-            Phase 2 is complete for this relationship. The next build layers daily check-ins, streaks, and the rest of the product loop on top.
-          </Text>
+        <>
+          <SurfaceCard accent="ink">
+            <Text style={styles.stateTitle}>Daily couple loop</Text>
+            <Text style={styles.stateBody}>Couple day {localDay ?? 'loading'} in {couple?.timezone ?? 'UTC'}</Text>
 
-          <View style={styles.partnerCard}>
-            <Text style={styles.partnerLabel}>Partner</Text>
-            <Text style={styles.partnerValue}>{partnerProfile?.display_name ?? 'Linked partner'}</Text>
-            <Text style={styles.partnerMeta}>
-              Shared timezone: {couple?.timezone ?? 'UTC'}
-              {couple?.linked_at ? ` • Linked ${new Date(couple.linked_at).toLocaleString()}` : ''}
+            <View style={styles.darkGrid}>
+              <DarkMetric label="Current streak" value={`${streak.current}`} />
+              <DarkMetric label="Longest streak" value={`${streak.longest}`} />
+              <DarkMetric label="Today" value={statusLabel(todayStatus)} />
+            </View>
+
+            <View style={styles.partnerCard}>
+              <Text style={styles.partnerLabel}>Progress</Text>
+              <Text style={styles.partnerMeta}>
+                Check-in {currentUserCheckIn ? 'done' : 'open'} | Prediction {currentUserPrediction ? 'done' : 'open'} | Reveal{' '}
+                {todayReveal ? 'unlocked' : 'locked'}
+              </Text>
+            </View>
+
+            <DailyAction status={todayStatus} onRefresh={() => void refreshToday()} />
+          </SurfaceCard>
+
+          <SurfaceCard accent="rose">
+            <Text style={styles.cardTitle}>Partner signal</Text>
+            <Text style={styles.partnerLight}>
+              Linked with {partnerProfile?.display_name ?? 'your partner'}. Phase 3A keeps this focused on the daily ritual: no chat feed, no public
+              surface, just the paired reveal.
             </Text>
-          </View>
-
-          <View style={styles.partnerCard}>
-            <Text style={styles.partnerLabel}>What’s next</Text>
-            <Text style={styles.partnerMeta}>
-              Daily check-ins, couple-local day boundaries, streak counters, and paired-day logic land in Phase 3A.
-            </Text>
-          </View>
-
-          <PrimaryButton label="Refresh relationship" onPress={() => void refreshRelationship()} variant="secondary" />
-        </SurfaceCard>
+            <PrimaryButton label="Refresh relationship" onPress={() => void refreshRelationship()} variant="secondary" />
+          </SurfaceCard>
+        </>
       ) : null}
 
       {relationshipState === 'link_error' ? (
         <SurfaceCard accent="ink">
           <Text style={styles.stateTitle}>Your last link action needs attention</Text>
-          <Text style={styles.stateBody}>
-            We kept the messaging safe and specific, and you can recover without touching the database manually.
-          </Text>
+          <Text style={styles.stateBody}>You can recover from this state without touching the database manually.</Text>
 
           {couple?.status === 'pending' ? (
             <>
@@ -197,6 +196,61 @@ export default function HomeScreen() {
       <PrimaryButton label="Sign out" variant="secondary" onPress={() => void signOut()} />
     </Screen>
   );
+}
+
+function DailyAction({ onRefresh, status }: { onRefresh: () => void; status: DailyStatus }) {
+  const router = useRouter();
+
+  if (status === 'needs_check_in') {
+    return <PrimaryButton label="Start check-in" onPress={() => router.push('/(app)/check-in')} />;
+  }
+
+  if (status === 'needs_prediction') {
+    return <PrimaryButton label="Predict partner" onPress={() => router.push('/(app)/prediction')} />;
+  }
+
+  if (status === 'reveal_ready') {
+    return <PrimaryButton label="Open reveal" onPress={() => router.push('/(app)/reveal')} />;
+  }
+
+  if (status === 'complete') {
+    return <PrimaryButton label="View reveal again" onPress={() => router.push('/(app)/reveal')} variant="secondary" />;
+  }
+
+  return <PrimaryButton label="Waiting for partner. Refresh" onPress={onRefresh} variant="secondary" />;
+}
+
+function SummaryChip({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryChip}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+function DarkMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.darkMetric}>
+      <Text style={styles.partnerLabel}>{label}</Text>
+      <Text style={styles.darkMetricValue}>{value}</Text>
+    </View>
+  );
+}
+
+function statusLabel(status: DailyStatus) {
+  switch (status) {
+    case 'needs_check_in':
+      return 'Check in';
+    case 'needs_prediction':
+      return 'Predict';
+    case 'waiting_for_partner':
+      return 'Waiting';
+    case 'reveal_ready':
+      return 'Reveal';
+    case 'complete':
+      return 'Complete';
+  }
 }
 
 const styles = StyleSheet.create({
@@ -234,12 +288,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     marginBottom: spacing.xs,
-  },
-  profileName: {
-    color: colors.text,
-    fontSize: 28,
-    fontWeight: '800',
-    marginBottom: spacing.md,
   },
   summaryGrid: {
     gap: spacing.sm,
@@ -313,6 +361,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
+  darkGrid: {
+    gap: spacing.sm,
+  },
+  darkMetric: {
+    backgroundColor: colors.darkOverlay,
+    borderRadius: 22,
+    padding: spacing.md,
+  },
+  darkMetricValue: {
+    color: colors.highlight,
+    fontSize: 28,
+    fontWeight: '900',
+  },
   partnerCard: {
     backgroundColor: colors.darkOverlay,
     borderRadius: 22,
@@ -325,15 +386,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
     textTransform: 'uppercase',
   },
-  partnerValue: {
-    color: colors.cardTextOnDark,
-    fontSize: 20,
-    fontWeight: '800',
-    marginBottom: spacing.xs,
-  },
   partnerMeta: {
     color: colors.cardMutedOnDark,
     fontSize: 14,
     lineHeight: 21,
+  },
+  partnerLight: {
+    color: colors.muted,
+    fontSize: 15,
+    lineHeight: 23,
   },
 });

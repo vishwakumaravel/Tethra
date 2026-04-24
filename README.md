@@ -1,10 +1,10 @@
 # Tethra
 
-Tethra is a couples app built with Expo / React Native. The project is currently at **Phase 2: Couple Linking + Relationship State Machine**.
+Tethra is a couples app built with Expo / React Native. The project is currently at **Phase 3A: Daily Couple Loop**.
 
 ## Current Stage
 
-Phase 2 is implemented and focused on the first real shared relationship flow.
+Phase 3A builds the first recurring relationship ritual on top of the tested Phase 2 linking foundation.
 
 - Expo Router app shell is in place
 - Supabase auth is wired for email, phone OTP, and Apple sign-in on iOS
@@ -13,6 +13,10 @@ Phase 2 is implemented and focused on the first real shared relationship flow.
 - signed-in users now land in a relationship state machine instead of a placeholder shell
 - couples can create, join, cancel, regenerate, and restore invite/link state from the signed-in home
 - invite codes are 6-character uppercase alphanumeric codes with a 24-hour lifetime
+- linked couples can complete daily check-ins and partner predictions
+- daily reveals unlock only after both partners complete the ritual
+- streak counters update when a paired day is completed
+- pure tests cover couple-local days, reveal readiness, duplicate prevention, and streak rules
 - Supabase SQL migrations exist for auth foundation, couple linking RPCs, and row-level security
 
 ## Implemented So Far
@@ -26,9 +30,14 @@ Phase 2 is implemented and focused on the first real shared relationship flow.
 - invite lifecycle RPCs with safe error handling
 - signed-in home for `unlinked`, `invite_sent`, `linked`, and `link_error`
 - one-active-invite-per-inviter enforcement with safe errors for invalid, expired, removed, reused, and self-join flows
+- daily loop provider and ritual dashboard
+- daily check-in screen
+- partner prediction screen
+- paired reveal screen
+- Phase 3A schema and RPCs for check-ins, predictions, reveals, and streak updates
 - settings and sign-out flow
 - Supabase foundation schema and policies
-- dev reset helper for Phase 2 simulator testing
+- dev reset helper for linked-couple and daily-loop testing
 
 ## Prerequisites
 
@@ -50,11 +59,13 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 1. Open your Supabase project's SQL editor.
 2. Run the migration in [supabase/migrations/20260417_phase1_auth_foundation.sql](/c:/Users/vkper/Downloads/Tethra/supabase/migrations/20260417_phase1_auth_foundation.sql:1).
 3. Run the migration in [supabase/migrations/20260418_phase2_relationship_linking.sql](/c:/Users/vkper/Downloads/Tethra/supabase/migrations/20260418_phase2_relationship_linking.sql:1).
-4. In Auth providers:
+4. Run the migration in [supabase/migrations/20260424_phase2_invite_rpc_status_hotfix.sql](/c:/Users/vkper/Downloads/Tethra/supabase/migrations/20260424_phase2_invite_rpc_status_hotfix.sql:1) if your project was created before the Phase 2 hotfix commit.
+5. Run the migration in [supabase/migrations/20260424_phase3a_daily_loop.sql](/c:/Users/vkper/Downloads/Tethra/supabase/migrations/20260424_phase3a_daily_loop.sql:1).
+6. In Auth providers:
    - enable Email
    - enable Phone
    - enable Apple
-5. For native iOS builds, keep `ios.usesAppleSignIn` enabled in [app.json](/c:/Users/vkper/Downloads/Tethra/app.json:1).
+7. For native iOS builds, keep `ios.usesAppleSignIn` enabled in [app.json](/c:/Users/vkper/Downloads/Tethra/app.json:1).
 
 ## Running the app
 
@@ -66,6 +77,7 @@ Useful scripts:
 
 - `npm run android`
 - `npm run ios`
+- `npm test`
 - `npm run typecheck`
 
 ## Phase 2 Testing
@@ -84,18 +96,34 @@ Dev reset helper:
 - [supabase/dev/reset_phase2_test_state.sql](/c:/Users/vkper/Downloads/Tethra/supabase/dev/reset_phase2_test_state.sql:1)
   Update the placeholder emails in that script before running it against your dev Supabase project.
 
+## Phase 3A Testing
+
+Recommended two-device flow:
+
+1. Confirm both test accounts are linked.
+2. On device A, complete the daily check-in.
+3. On device A, predict device B's mood and relationship feeling.
+4. Confirm device A shows the waiting state.
+5. On device B, complete the daily check-in.
+6. On device B, predict device A's mood and relationship feeling.
+7. Confirm the reveal unlocks on both devices.
+8. Open the reveal on both devices.
+9. Confirm current streak is `1` and duplicate check-ins/predictions are blocked.
+
 ## Verified
 
 - `npm run typecheck`
+- `npm test`
 - `npx expo export --platform android`
 - `npx expo export --platform ios`
 
 ## Next Stage
 
-Phase 3A builds the first recurring relationship loop on top of the linked-couple foundation:
+Phase 3B adds the first progression layer on top of the daily ritual:
 
-- daily check-ins
-- streaks
-- couple-local day boundaries
-- duplicate-check-in prevention
-- paired-day streak behavior
+- daily reactions
+- lightweight notes tied to reveals
+- XP
+- hidden relationship score
+- visible tier progression
+- basic analytics
