@@ -48,6 +48,8 @@ export type DailyReactionErrorCode =
   | 'reveal_missing'
   | 'unknown';
 export type ReactionType = 'heart' | 'hug' | 'laugh' | 'oof' | 'proud';
+export type ReceiptConfidence = 'high' | 'low' | 'medium';
+export type ReceiptStatus = 'error' | 'generated' | 'loading' | 'low_data' | 'not_ready' | 'ready_to_generate';
 export type TierName =
   | 'Actually a Couple'
   | 'Endgame'
@@ -121,6 +123,41 @@ export interface Database {
           status: CoupleStatus | null;
           timezone: string | null;
         }[];
+      };
+      get_or_create_weekly_receipt: {
+        Args: {
+          target_period_start_local?: string | null;
+        };
+        Returns: {
+          created: boolean;
+          message: string | null;
+          ok: boolean;
+          receipt_attachment_balance_score: number | null;
+          receipt_communication_score: number | null;
+          receipt_compatibility_score: number | null;
+          receipt_confidence_label: ReceiptConfidence | null;
+          receipt_conflict_risk_score: number | null;
+          receipt_couple_id: string | null;
+          receipt_created_at: string | null;
+          receipt_emotional_alignment_score: number | null;
+          receipt_fun_insight: string | null;
+          receipt_generation_version: number | null;
+          receipt_green_flag: string | null;
+          receipt_id: string | null;
+          receipt_paired_days_count: number | null;
+          receipt_period_end_local: string | null;
+          receipt_period_start_local: string | null;
+          receipt_red_flag: string | null;
+          receipt_summary: string | null;
+          receipt_updated_at: string | null;
+          status: ReceiptStatus;
+        }[];
+      };
+      get_or_create_weekly_receipt_v2: {
+        Args: {
+          target_period_start_local?: string | null;
+        };
+        Returns: Json;
       };
       mark_daily_reveal_viewed: {
         Args: {
@@ -461,6 +498,69 @@ export interface Database {
           xp_awarded?: number;
         };
       };
+      receipts: {
+        Insert: {
+          attachment_balance_score?: number;
+          communication_score?: number;
+          compatibility_score?: number;
+          confidence_label: ReceiptConfidence;
+          conflict_risk_score?: number;
+          couple_id: string;
+          created_at?: string;
+          emotional_alignment_score?: number;
+          fun_insight: string;
+          generation_version?: number;
+          green_flag?: string | null;
+          id?: string;
+          paired_days_count?: number;
+          period_end_local: string;
+          period_start_local: string;
+          red_flag?: string | null;
+          summary: string;
+          updated_at?: string;
+        };
+        Row: {
+          attachment_balance_score: number;
+          communication_score: number;
+          compatibility_score: number;
+          confidence_label: ReceiptConfidence;
+          conflict_risk_score: number;
+          couple_id: string;
+          created_at: string;
+          emotional_alignment_score: number;
+          fun_insight: string;
+          generation_version: number;
+          green_flag: string | null;
+          id: string;
+          paired_days_count: number;
+          period_end_local: string;
+          period_start_local: string;
+          red_flag: string | null;
+          summary: string;
+          updated_at: string;
+        };
+        Relationships: [];
+        Update: {
+          attachment_balance_score?: number;
+          communication_score?: number;
+          compatibility_score?: number;
+          confidence_label?: ReceiptConfidence;
+          conflict_risk_score?: number;
+          couple_id?: string;
+          created_at?: string;
+          emotional_alignment_score?: number;
+          fun_insight?: string;
+          generation_version?: number;
+          green_flag?: string | null;
+          id?: string;
+          paired_days_count?: number;
+          period_end_local?: string;
+          period_start_local?: string;
+          red_flag?: string | null;
+          summary?: string;
+          updated_at?: string;
+        };
+      };
       profiles: {
         Insert: {
           avatar_url?: string | null;
@@ -513,3 +613,4 @@ export type DailyReaction = Database['public']['Tables']['daily_reactions']['Row
 export type DailyReveal = Database['public']['Tables']['daily_reveals']['Row'];
 export type PartnerStatus = Database['public']['Enums']['partner_status'];
 export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type WeeklyReceipt = Database['public']['Tables']['receipts']['Row'];

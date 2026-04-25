@@ -2,15 +2,19 @@ import * as React from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
+import { RankShareCard, ReceiptShareCard } from '@/components/share-cards';
 import { InlineMessage, PrimaryButton, Screen, SurfaceCard, TextField } from '@/components/ui';
 import { useAuth } from '@/context/auth';
 import { useDailyLoop } from '@/context/daily-loop';
+import { useReceipt } from '@/context/receipt';
 import { useRelationship } from '@/context/relationship';
+import { shareViewAsImage } from '@/lib/share-image';
+import { buildBrandedReceipt, getPreviewReceiptScenario, ReceiptMetricSet, ReceiptPreviewScenario } from '@/logic/receiptProduct';
 import { getNextTierProgress, getTierProgressionNote } from '@/logic/tiers';
-import { DailyStatus } from '@/types/database';
+import { DailyStatus, ReceiptStatus, WeeklyReceipt } from '@/types/database';
 import { colors, spacing } from '@/theme/tokens';
 
-type HomeTab = 'activity' | 'rank' | 'ritual';
+type HomeTab = 'activity' | 'rank' | 'receipt' | 'ritual';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -32,15 +36,25 @@ export default function HomeScreen() {
     todayStatus,
     xp,
   } = useDailyLoop();
+  const { error: receiptError, generateReceipt, isLoading: isReceiptLoading, latestReceipt, receiptStatus, viewReceipt } = useReceipt();
   const [joinCode, setJoinCode] = React.useState('');
   const [feedback, setFeedback] = React.useState<string | null>(null);
   const [selectedTab, setSelectedTab] = React.useState<HomeTab>('ritual');
+  const rankShareRef = React.useRef<View>(null);
 
   const normalizedJoinCode = joinCode.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
   const inviteExpiresAt = couple?.invite_expires_at ? new Date(couple.invite_expires_at) : null;
   const hasJoinCode = normalizedJoinCode.length === 6;
   const tierProgress = getNextTierProgress(relationshipScore);
   const tierProgressionNote = getTierProgressionNote(pairedDaysCount);
+  const todayDateLabel = formatTodayDate();
+  const relationshipTimeLabel = formatRelationshipTime(couple?.linked_at ?? couple?.created_at ?? null);
+
+  React.useEffect(() => {
+    if (selectedTab === 'receipt') {
+      viewReceipt();
+    }
+  }, [selectedTab, viewReceipt]);
 
   const handleCreateInvite = async (regenerate = false) => {
     const result = await createInvite({ regenerate });
@@ -74,8 +88,8 @@ export default function HomeScreen() {
   const handleShareRank = async () => {
     const nextLine = tierProgress.nextTier ? `${tierProgress.pointsToNext} points from ${tierProgress.nextTier}.` : 'Top tier unlocked.';
 
-    await Share.share({
-      message: `We are ${currentTier} on Tethra 🏹\nScore: ${Math.round(relationshipScore)}/100 · ${pairedDaysCount} paired day${
+    await shareViewAsImage(rankShareRef, {
+      fallbackMessage: `We are ${currentTier} on Tethra 🏹\nScore: ${Math.round(relationshipScore)}/100 · ${pairedDaysCount} paired day${
         pairedDaysCount === 1 ? '' : 's'
       }\n${nextLine}`,
       title: 'Share Tethra rank',
@@ -99,6 +113,19 @@ export default function HomeScreen() {
           <Text style={styles.settingsLink}>Settings</Text>
         </Pressable>
       </View>
+
+      {relationshipState === 'linked' ? (
+        <View style={styles.relationshipMetaRow}>
+          <View style={styles.relationshipMetaPill}>
+            <Text style={styles.relationshipMetaEmoji}>📅</Text>
+            <Text style={styles.relationshipMetaText}>{todayDateLabel}</Text>
+          </View>
+          <View style={styles.relationshipMetaPill}>
+            <Text style={styles.relationshipMetaEmoji}>💞</Text>
+            <Text style={styles.relationshipMetaText}>{relationshipTimeLabel}</Text>
+          </View>
+        </View>
+      ) : null}
 
       {relationshipState !== 'linked' ? (
         <SurfaceCard accent="rose">
@@ -169,6 +196,7 @@ export default function HomeScreen() {
           <View style={styles.tabBar}>
             <HomeTabButton label="Ritual" selected={selectedTab === 'ritual'} onPress={() => setSelectedTab('ritual')} />
             <HomeTabButton label="Rank" selected={selectedTab === 'rank'} onPress={() => setSelectedTab('rank')} />
+            <HomeTabButton label="Receipt" selected={selectedTab === 'receipt'} onPress={() => setSelectedTab('receipt')} />
             <HomeTabButton label="Activity" selected={selectedTab === 'activity'} onPress={() => setSelectedTab('activity')} />
           </View>
 
@@ -202,23 +230,14 @@ export default function HomeScreen() {
               <Text style={styles.stateTitle}>Your rank</Text>
               <Text style={styles.stateBody}>Earned slowly. Shared together.</Text>
 
-              <View style={styles.tierCard}>
-                <Text style={styles.partnerLabel}>Current tier</Text>
-                <Text style={styles.tierValue}>{currentTier}</Text>
-                <Text style={styles.partnerMeta}>
-                  Score {Math.round(relationshipScore)}/100 | {xp} XP | {pairedDaysCount} paired day{pairedDaysCount === 1 ? '' : 's'}
-                </Text>
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${tierProgress.percent}%` }]} />
-                </View>
-                <Text style={styles.partnerMeta}>
-                  {tierProgress.nextTier
-                    ? `${tierProgress.pointsToNext} points to ${tierProgress.nextTier}`
-                    : 'Top tier reached. Extremely suspicious, in a good way.'}
-                </Text>
-              </View>
-
-              <PrimaryButton label="Share rank" onPress={() => void handleShareRank()} />
+              <RankShareCard
+                ref={rankShareRef}
+                currentTier={currentTier}
+                onShare={() => void handleShareRank()}
+                pairedDaysCount={pairedDaysCount}
+                relationshipScore={relationshipScore}
+                xp={xp}
+              />
 
               <View style={styles.partnerCard}>
                 <Text style={styles.partnerLabel}>Slow on purpose</Text>
@@ -232,6 +251,17 @@ export default function HomeScreen() {
                 </Text>
               </View>
             </SurfaceCard>
+          ) : null}
+
+          {selectedTab === 'receipt' ? (
+            <ReceiptTab
+              currentTier={currentTier}
+              isLoading={isReceiptLoading}
+              onRefresh={() => void generateReceipt()}
+              receipt={latestReceipt}
+              receiptError={receiptError}
+              status={receiptStatus}
+            />
           ) : null}
 
           {selectedTab === 'activity' ? (
@@ -312,6 +342,157 @@ function DailyAction({ onRefresh, status }: { onRefresh: () => void; status: Dai
   return <PrimaryButton label="Waiting for partner. Refresh" onPress={onRefresh} variant="secondary" />;
 }
 
+function ReceiptTab({
+  currentTier,
+  isLoading,
+  onRefresh,
+  receipt,
+  receiptError,
+  status,
+}: {
+  currentTier: string;
+  isLoading: boolean;
+  onRefresh: () => void;
+  receipt: WeeklyReceipt | null;
+  receiptError: string | null;
+  status: ReceiptStatus;
+}) {
+  const receiptShareRef = React.useRef<View>(null);
+  const [previewScenario, setPreviewScenario] = React.useState<ReceiptPreviewScenario | null>(null);
+  const preview = previewScenario ? getPreviewReceiptScenario(previewScenario) : null;
+  const displayReceipt = receipt ?? (preview ? createPreviewReceipt(preview) : null);
+
+  if (!displayReceipt) {
+    return (
+      <SurfaceCard accent="ink">
+        <Text style={styles.bigEmoji}>🧾</Text>
+        <Text style={styles.stateTitle}>{status === 'not_ready' ? 'Still cooking.' : 'Receipt soon.'}</Text>
+        <Text style={styles.stateBody}>
+          {receiptError ?? 'Weekly receipts unlock after a Monday-Sunday week closes. Keep stacking paired days.'}
+        </Text>
+        <PrimaryButton label="Check receipt" onPress={onRefresh} loading={isLoading} variant="secondary" />
+        {__DEV__ ? <ReceiptPreviewPicker selected={previewScenario} onSelect={setPreviewScenario} /> : null}
+      </SurfaceCard>
+    );
+  }
+
+  const receiptMetrics = preview?.metrics ?? getReceiptMetrics(displayReceipt);
+  const brandedReceipt = buildBrandedReceipt({
+    confidence: displayReceipt.confidence_label,
+    currentTier: preview?.tier ?? currentTier,
+    metrics: receiptMetrics,
+    pairedDaysCount: displayReceipt.paired_days_count,
+  });
+  const isLowData = displayReceipt.confidence_label === 'low';
+  const handleShareReceipt = async () => {
+    await shareViewAsImage(receiptShareRef, {
+      fallbackMessage: `Our Tethra receipt: ${brandedReceipt.title}\n${brandedReceipt.overallScore}% in sync · ${displayReceipt.confidence_label} signal\n${brandedReceipt.freeInsight}`,
+      title: 'Share Tethra receipt',
+    });
+  };
+
+  return (
+    <SurfaceCard accent="ink">
+      <Text style={styles.bigEmoji}>{isLowData ? '🥄' : '🧾'}</Text>
+      <Text style={styles.stateTitle}>{brandedReceipt.title}</Text>
+      <Text style={styles.stateBody}>
+        {formatLocalRange(displayReceipt.period_start_local, displayReceipt.period_end_local)} · {displayReceipt.paired_days_count}/7 paired days
+      </Text>
+
+      <ReceiptShareCard
+        ref={receiptShareRef}
+        brandedReceipt={brandedReceipt}
+        onShare={() => void handleShareReceipt()}
+        receipt={displayReceipt}
+      />
+
+      <View style={styles.partnerCard}>
+        <Text style={styles.partnerLabel}>Free read</Text>
+        <Text style={styles.receiptSummary}>{brandedReceipt.freeInsight}</Text>
+      </View>
+
+      <View style={styles.receiptScoreRow}>
+        <ReceiptMiniMetric label="Score" value={`${brandedReceipt.overallScore}%`} />
+        <ReceiptMiniMetric label="Tier" value={brandedReceipt.currentTier} />
+      </View>
+
+      <View style={styles.proTeaser}>
+        <Text style={styles.proTitle}>Pro unlocks answers</Text>
+        {brandedReceipt.lockedInsightCards.map((card) => (
+          <Text key={card} style={styles.lockedLine}>🔒 {card}</Text>
+        ))}
+      </View>
+
+      {__DEV__ ? (
+        <>
+          <ReceiptPreviewPicker selected={previewScenario} onSelect={setPreviewScenario} />
+          <View style={styles.partnerCard}>
+            <Text style={styles.partnerLabel}>Pro preview</Text>
+            {brandedReceipt.proInsightCards.slice(0, 3).map((card) => (
+              <View key={card.title} style={styles.proPreviewCard}>
+                <Text style={styles.proPreviewTitle}>{card.title}</Text>
+                <Text style={styles.partnerMeta}>{card.body}</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      ) : null}
+
+      <View style={styles.partnerCard}>
+        <Text style={styles.partnerLabel}>Summary</Text>
+        <Text style={styles.partnerMeta}>{brandedReceipt.shortSummary}</Text>
+      </View>
+
+      <PrimaryButton label="Refresh receipt" onPress={onRefresh} loading={isLoading} variant="secondary" />
+    </SurfaceCard>
+  );
+}
+
+function ReceiptPreviewPicker({
+  onSelect,
+  selected,
+}: {
+  onSelect: (scenario: ReceiptPreviewScenario | null) => void;
+  selected: ReceiptPreviewScenario | null;
+}) {
+  const scenarios: Array<{ label: string; value: ReceiptPreviewScenario }> = [
+    { label: '🔥 high sync', value: 'high_sync' },
+    { label: '🫠 one-sided', value: 'one_sided_effort' },
+    { label: '⚡ stress', value: 'high_stress_mismatch' },
+    { label: '🥄 low data', value: 'low_data' },
+    { label: '🧠 aware', value: 'strong_awareness' },
+    { label: '🙃 misread', value: 'poor_awareness' },
+  ];
+
+  return (
+    <View style={styles.previewWrap}>
+      <Text style={styles.partnerLabel}>Dev previews</Text>
+      <View style={styles.previewGrid}>
+        {scenarios.map((scenario) => (
+          <Pressable
+            key={scenario.value}
+            onPress={() => onSelect(selected === scenario.value ? null : scenario.value)}
+            style={[styles.previewChip, selected === scenario.value ? styles.previewChipSelected : null]}
+          >
+            <Text style={[styles.previewChipText, selected === scenario.value ? styles.previewChipTextSelected : null]}>
+              {scenario.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function ReceiptMiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.receiptMiniMetric}>
+      <Text style={styles.partnerLabel}>{label}</Text>
+      <Text style={styles.receiptMiniMetricValue}>{value}</Text>
+    </View>
+  );
+}
+
 function HomeTabButton({ label, onPress, selected }: { label: string; onPress: () => void; selected: boolean }) {
   return (
     <Pressable onPress={onPress} style={[styles.tabButton, selected ? styles.tabButtonSelected : null]}>
@@ -353,6 +534,87 @@ function statusLabel(status: DailyStatus) {
   }
 }
 
+function formatLocalRange(start: string, end: string) {
+  return `${formatLocalDay(start)}-${formatLocalDay(end)}`;
+}
+
+function formatLocalDay(localDay: string) {
+  const [, month, day] = localDay.split('-');
+  return `${month}/${day}`;
+}
+
+function formatTodayDate() {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    weekday: 'short',
+    day: 'numeric',
+  }).format(new Date());
+}
+
+function formatRelationshipTime(startedAt: string | null) {
+  if (!startedAt) {
+    return 'Just linked';
+  }
+
+  const start = new Date(startedAt);
+  const days = Math.max(0, Math.floor((Date.now() - start.getTime()) / 86_400_000));
+
+  if (days === 0) {
+    return 'Day 1 together';
+  }
+
+  if (days < 30) {
+    return `${days + 1} days together`;
+  }
+
+  const months = Math.floor(days / 30);
+
+  if (months < 12) {
+    return `${months} mo together`;
+  }
+
+  const years = Math.floor(months / 12);
+  const extraMonths = months % 12;
+
+  return extraMonths > 0 ? `${years}y ${extraMonths}m together` : `${years}y together`;
+}
+
+function getReceiptMetrics(receipt: WeeklyReceipt): ReceiptMetricSet {
+  return {
+    communicationScore: receipt.communication_score,
+    compatibilityScore: receipt.compatibility_score,
+    conflictRiskScore: receipt.conflict_risk_score,
+    effortBalanceScore: receipt.attachment_balance_score,
+    emotionalSyncScore: receipt.emotional_alignment_score,
+    partnerAwarenessScore: Math.round((receipt.compatibility_score + receipt.communication_score) / 2),
+  };
+}
+
+function createPreviewReceipt(preview: ReturnType<typeof getPreviewReceiptScenario>): WeeklyReceipt {
+  const now = new Date().toISOString();
+
+  return {
+    attachment_balance_score: preview.metrics.effortBalanceScore,
+    communication_score: preview.metrics.communicationScore,
+    compatibility_score: preview.metrics.compatibilityScore,
+    confidence_label: preview.confidence,
+    conflict_risk_score: preview.metrics.conflictRiskScore,
+    couple_id: 'preview',
+    created_at: now,
+    emotional_alignment_score: preview.metrics.emotionalSyncScore,
+    fun_insight: 'Preview receipt for tuning the Tethra feel.',
+    generation_version: 1,
+    green_flag: null,
+    id: `preview-${preview.tier}`,
+    paired_days_count: preview.pairedDaysCount,
+    period_end_local: '2026-04-26',
+    period_start_local: '2026-04-20',
+    red_flag: null,
+    summary: 'Preview receipt. Real receipts use the couple weekly data.',
+    updated_at: now,
+  };
+}
+
 const styles = StyleSheet.create({
   header: {
     gap: spacing.md,
@@ -383,6 +645,32 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 15,
     fontWeight: '700',
+  },
+  relationshipMetaRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  relationshipMetaPill: {
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+  },
+  relationshipMetaEmoji: {
+    fontSize: 18,
+  },
+  relationshipMetaText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
   },
   cardTitle: {
     color: colors.text,
@@ -512,27 +800,88 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     padding: spacing.md,
   },
-  tierCard: {
+  receiptSummary: {
+    color: colors.cardTextOnDark,
+    fontSize: 19,
+    fontWeight: '800',
+    lineHeight: 27,
+  },
+  receiptScoreRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  receiptMiniMetric: {
     backgroundColor: colors.darkOverlay,
     borderRadius: 22,
+    flex: 1,
+    padding: spacing.md,
+  },
+  receiptMiniMetricValue: {
+    color: colors.highlight,
+    fontSize: 22,
+    fontWeight: '900',
+    lineHeight: 28,
+  },
+  proTeaser: {
+    backgroundColor: 'rgba(255, 248, 245, 0.12)',
+    borderColor: 'rgba(255, 248, 245, 0.18)',
+    borderRadius: 22,
+    borderWidth: 1,
     gap: spacing.xs,
     padding: spacing.md,
   },
-  tierValue: {
-    color: colors.highlight,
-    fontSize: 30,
+  proTitle: {
+    color: colors.cardTextOnDark,
+    fontSize: 18,
     fontWeight: '900',
   },
-  progressTrack: {
-    backgroundColor: 'rgba(255, 248, 245, 0.16)',
-    borderRadius: 999,
-    height: 10,
-    overflow: 'hidden',
+  lockedLine: {
+    color: colors.highlight,
+    fontSize: 14,
+    fontWeight: '900',
   },
-  progressFill: {
-    backgroundColor: colors.highlight,
+  proPreviewCard: {
+    backgroundColor: 'rgba(255, 248, 245, 0.1)',
+    borderRadius: 18,
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+  },
+  proPreviewTitle: {
+    color: colors.cardTextOnDark,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  previewWrap: {
+    backgroundColor: colors.darkOverlay,
+    borderRadius: 22,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  previewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  previewChip: {
+    backgroundColor: 'rgba(255, 248, 245, 0.12)',
+    borderColor: 'rgba(255, 248, 245, 0.14)',
     borderRadius: 999,
-    height: '100%',
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  previewChipSelected: {
+    backgroundColor: colors.highlight,
+    borderColor: colors.highlight,
+  },
+  previewChipText: {
+    color: colors.cardTextOnDark,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  previewChipTextSelected: {
+    color: colors.ink,
   },
   partnerLabel: {
     color: colors.cardMutedOnDark,

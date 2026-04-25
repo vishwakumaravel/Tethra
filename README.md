@@ -1,10 +1,12 @@
 # Tethra
 
-Tethra is a couples app built with Expo / React Native. The project is currently at **Phase 3B: Reactions, XP, Tiers, and Basic Analytics**.
+Tethra is a couples app built with Expo / React Native. The project is currently at **Phase 4: Weekly Receipt Engine + Confidence Rules**.
+
+For future product and implementation context, start with [TETHRA_MASTER_CONTEXT.md](/c:/Users/vkper/Downloads/Tethra/TETHRA_MASTER_CONTEXT.md:1).
 
 ## Current Stage
 
-Phase 3B adds the first progression layer on top of the tested daily couple ritual.
+Phase 4 adds deterministic weekly receipts on top of the tested daily couple ritual and progression layer.
 
 - Expo Router app shell is in place
 - Supabase auth is wired for email, phone OTP, and Apple sign-in on iOS
@@ -26,6 +28,10 @@ Phase 3B adds the first progression layer on top of the tested daily couple ritu
 - check-in and prediction inputs use emoji-backed sliders
 - Rank tab includes a native share-sheet button for Messages, Instagram, and other installed apps
 - lightweight analytics events are stored without raw notes or raw emotional answers
+- weekly receipts generate lazily after a closed Monday-Sunday couple-local week
+- receipt confidence is labeled as low, medium, or high based on paired-day count
+- low-data receipts stay soft and avoid fake spicy claims
+- the linked home now includes a Receipt tab with native text sharing and honest Pro-later teaser copy
 - pure tests cover couple-local days, reveal readiness, duplicate prevention, and streak rules
 - Supabase SQL migrations exist for auth foundation, couple linking RPCs, and row-level security
 
@@ -52,6 +58,10 @@ Phase 3B adds the first progression layer on top of the tested daily couple ritu
 - groundwork copy for future percentile comparison against other Tethra couples
 - pure XP, prediction accuracy, relationship score, tier, and analytics sanitizer tests
 - Supabase-backed privacy-conscious analytics event sink
+- deterministic receipt scoring, confidence, template, and week-window logic
+- branded receipt product layer with Weekly Vibe, Overall Score, free insight, locked teasers, Pro answer cards, and dev preview scenarios
+- Receipt provider and receipt tab on linked home
+- Phase 4 schema and RPC for idempotent weekly receipts
 - Phase 3A schema and RPCs for check-ins, predictions, reveals, and streak updates
 - Phase 3B schema and RPC for reactions, XP, cached relationship metrics, tiers, and analytics
 - settings and sign-out flow
@@ -84,11 +94,14 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 7. Run the migration in [supabase/migrations/20260424_phase3b_progression_hotfix.sql](/c:/Users/vkper/Downloads/Tethra/supabase/migrations/20260424_phase3b_progression_hotfix.sql:1).
 8. Run the migration in [supabase/migrations/20260424_phase3b_relationship_exit.sql](/c:/Users/vkper/Downloads/Tethra/supabase/migrations/20260424_phase3b_relationship_exit.sql:1).
 9. Run the migration in [supabase/migrations/20260424_phase3b_realtime_publication.sql](/c:/Users/vkper/Downloads/Tethra/supabase/migrations/20260424_phase3b_realtime_publication.sql:1).
-10. In Auth providers:
+10. Run the migration in [supabase/migrations/20260424_phase4_weekly_receipts.sql](/c:/Users/vkper/Downloads/Tethra/supabase/migrations/20260424_phase4_weekly_receipts.sql:1).
+11. Run the migration in [supabase/migrations/20260424_phase4_receipt_rpc_ambiguity_hotfix.sql](/c:/Users/vkper/Downloads/Tethra/supabase/migrations/20260424_phase4_receipt_rpc_ambiguity_hotfix.sql:1).
+12. Run the migration in [supabase/migrations/20260424_phase4_receipt_rpc_v2_json.sql](/c:/Users/vkper/Downloads/Tethra/supabase/migrations/20260424_phase4_receipt_rpc_v2_json.sql:1).
+13. In Auth providers:
    - enable Email
    - enable Phone
    - enable Apple
-11. For native iOS builds, keep `ios.usesAppleSignIn` enabled in [app.json](/c:/Users/vkper/Downloads/Tethra/app.json:1).
+14. For native iOS builds, keep `ios.usesAppleSignIn` enabled in [app.json](/c:/Users/vkper/Downloads/Tethra/app.json:1).
 
 ## Running the app
 
@@ -150,14 +163,30 @@ Recommended two-device flow:
 11. Re-link both devices, then test Settings -> Exit relationship and confirm both accounts return to unlinked.
 12. Re-run the dev reset helper when you want to repeat the full paired flow.
 
+## Phase 4 Testing
+
+Recommended receipt flow:
+
+1. Run the Phase 4 receipts migration in Supabase.
+2. Use a linked test couple with daily ritual data from a closed Monday-Sunday window.
+3. Open the Receipt tab and tap Check receipt or Refresh receipt.
+4. Confirm the receipt is created once and reopening the app reuses the same row.
+5. Test a sparse week and confirm it says Tiny receipt / low signal instead of showing fake red flags.
+6. Test a fuller week and confirm compatibility, communication, alignment, confidence, summary, and share text appear.
+7. Confirm `analytics_events` records `receipt_generated` and `receipt_viewed` metadata only.
+8. Confirm unrelated users cannot read another couple's receipts under RLS.
+
 ## Product Notes
 
 - UI direction: less text, larger type, cozy visuals, and short emotionally clear cards.
 - Realtime is part of the ritual: partner actions should just appear.
-- Phase 5 should replace text sharing with screenshot-ready rank and receipt cards.
+- Rank and receipt sharing use image capture of the card, with Phase 5 reserved for final screenshot-ready art direction.
 - Rank should feel earned and socially comparable, not random or farmable.
 - Future percentile comparison belongs on the Rank surface after enough real usage exists.
 - Pro value should center on weekly receipt depth: green flags, red flags, conflict triggers, trend explanations, rank explanation, and history.
+- Receipts should answer what happened and why, not just show more numbers.
+- Shared product constants live in [tethra.ts](/c:/Users/vkper/Downloads/Tethra/src/product/tethra.ts:1) so future code/design work stays aligned to the core loop and monetization boundary.
+- Dev receipt previews cover high sync, one-sided effort, high stress mismatch, low data, strong awareness, and poor awareness.
 - If one linked partner buys Pro later, both partners should receive couple-level Pro access while linked.
 - The relationship exit flow should unlink both people and clear couple ritual data; subscription cancellation remains handled through Apple/Google subscription management once RevenueCat lands.
 - Keep the free core loop intact; monetize deeper interpretation, not basic daily use.
@@ -171,9 +200,9 @@ Recommended two-device flow:
 
 ## Next Stage
 
-Phase 4 builds the weekly receipt engine on top of the daily ritual:
+Phase 5 is the major design and beta-polish pass:
 
-- deterministic score calculators
-- low / medium / high confidence rules
-- template-based weekly receipt generation
-- premium teaser states without fake precision
+- Claude/design integration over the functional app
+- receipt/rank/history surfaces
+- screenshot-ready share cards
+- internal beta feedback capture
