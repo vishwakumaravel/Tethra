@@ -65,8 +65,19 @@ export const dailyPredictionSchema = z.object({
   predictedRelationshipFeelingScore: z.number().min(1).max(5),
 });
 
+export const dailyReactionSchema = z.object({
+  note: z
+    .string()
+    .trim()
+    .optional()
+    .refine((value) => !value || value.length >= 12, 'Notes need at least 12 characters or can be left blank.')
+    .refine((value) => !value || value.length <= 160, 'Keep reveal notes under 160 characters.'),
+  reactionType: z.enum(['heart', 'hug', 'laugh', 'oof', 'proud']),
+});
+
 export type DailyCheckInFormValues = z.input<typeof dailyCheckInSchema>;
 export type DailyPredictionFormValues = z.input<typeof dailyPredictionSchema>;
+export type DailyReactionFormValues = z.input<typeof dailyReactionSchema>;
 export type EmailAuthFormValues = z.input<typeof emailAuthSchema>;
 export type InviteCodeValues = z.input<typeof inviteCodeSchema>;
 export type PhoneCodeValues = z.input<typeof phoneCodeSchema>;

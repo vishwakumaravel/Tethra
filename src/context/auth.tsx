@@ -2,6 +2,7 @@ import { AuthError, Session, User } from '@supabase/supabase-js';
 import * as React from 'react';
 
 import { beginAppleSignIn } from '@/lib/apple-auth';
+import { trackEvent } from '@/lib/analytics';
 import { hasSupabaseCredentials, supabase } from '@/lib/supabase';
 import { Database, Profile } from '@/types/database';
 import { ProfileFormValues } from '@/validation/forms';
@@ -133,6 +134,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (data.session?.user) {
       await syncProfile(data.session.user);
+      void trackEvent('sign_up_completed', {
+        auth_method: 'email',
+        surface: 'email_auth',
+      });
       return { ok: true, message: 'Account created. Finish your profile next.' };
     }
 
@@ -214,6 +219,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (data.user) {
         await seedProfile(data.user, fullName ? { display_name: fullName } : undefined);
+        void trackEvent('sign_up_completed', {
+          auth_method: 'apple',
+          surface: 'apple_auth',
+        });
       }
 
       return { ok: true, message: 'Apple sign-in complete. Routing you forward...' };

@@ -1,4 +1,4 @@
--- Tethra Phase 2 simulator reset helper
+-- Tethra dev simulator reset helper
 -- Run this only against your dev Supabase project.
 -- Replace the two email addresses below before executing.
 
@@ -17,6 +17,38 @@ begin
 
   if coalesce(array_length(target_ids, 1), 0) = 0 then
     raise exception 'No auth.users matched the supplied emails. Update target_emails first.';
+  end if;
+
+  if to_regclass('public.analytics_events') is not null then
+    delete from public.analytics_events
+    where user_id = any(target_ids)
+       or couple_id in (
+         select id
+         from public.couples
+         where user_1_id = any(target_ids)
+            or user_2_id = any(target_ids)
+       );
+  end if;
+
+  if to_regclass('public.couple_daily_metrics') is not null then
+    delete from public.couple_daily_metrics
+    where couple_id in (
+      select id
+      from public.couples
+      where user_1_id = any(target_ids)
+         or user_2_id = any(target_ids)
+    );
+  end if;
+
+  if to_regclass('public.daily_reactions') is not null then
+    delete from public.daily_reactions
+    where sender_id = any(target_ids)
+       or couple_id in (
+         select id
+         from public.couples
+         where user_1_id = any(target_ids)
+            or user_2_id = any(target_ids)
+       );
   end if;
 
   if to_regclass('public.daily_reveals') is not null then

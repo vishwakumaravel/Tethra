@@ -2,16 +2,24 @@ import { useRouter } from 'expo-router';
 import * as React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { InlineMessage, PrimaryButton, Screen, SurfaceCard } from '@/components/ui';
+import { BackButton, InlineMessage, PrimaryButton, Screen, SurfaceCard, TextField } from '@/components/ui';
 import { useAuth } from '@/context/auth';
 import { useDailyLoop } from '@/context/daily-loop';
 import { useRelationship } from '@/context/relationship';
 import { colors, spacing } from '@/theme/tokens';
+import { ReactionType } from '@/types/database';
 
 type RevealKind = 'mood' | 'feeling';
 
 const moodSymbols = ['😞', '🙁', '😐', '🙂', '😍'];
 const feelingSymbols = ['💔', '🩹', '🤍', '💗', '❤️'];
+const reactionOptions: Array<{ emoji: string; label: string; value: ReactionType }> = [
+  { emoji: '❤️', label: 'Heart', value: 'heart' },
+  { emoji: '🫂', label: 'Hug', value: 'hug' },
+  { emoji: '😂', label: 'Laugh', value: 'laugh' },
+  { emoji: '😬', label: 'Oof', value: 'oof' },
+  { emoji: '🥹', label: 'Proud', value: 'proud' },
+];
 
 export default function RevealScreen() {
   const router = useRouter();
@@ -19,13 +27,19 @@ export default function RevealScreen() {
   const {
     currentUserCheckIn,
     currentUserPrediction,
+    currentUserReaction,
     markRevealViewed,
     partnerCheckIn,
     partnerPrediction,
+    partnerReaction,
+    saveReaction,
     todayReveal,
   } = useDailyLoop();
   const { partnerProfile } = useRelationship();
   const [feedback, setFeedback] = React.useState<string | null>(null);
+  const [note, setNote] = React.useState('');
+  const [reactionFeedback, setReactionFeedback] = React.useState<string | null>(null);
+  const [reactionType, setReactionType] = React.useState<ReactionType>('heart');
 
   const handleDone = async () => {
     const result = await markRevealViewed();
@@ -36,13 +50,26 @@ export default function RevealScreen() {
     }
   };
 
+  const handleSaveReaction = async () => {
+    const result = await saveReaction({
+      note,
+      reactionType,
+    });
+
+    setReactionFeedback(result.message ?? null);
+
+    if (result.ok) {
+      setNote('');
+    }
+  };
+
   const revealReady = Boolean(todayReveal && currentUserCheckIn && currentUserPrediction && partnerCheckIn && partnerPrediction);
+  const noteLength = note.trim().length;
+  const hasInvalidNoteLength = noteLength > 0 && (noteLength < 12 || noteLength > 160);
 
   return (
     <Screen>
-      <Pressable onPress={() => router.back()} style={styles.backButton}>
-        <Text style={styles.backLabel}>Back</Text>
-      </Pressable>
+      <BackButton onPress={() => router.back()} />
 
       <View style={styles.hero}>
         <Text style={styles.kicker}>REVEAL</Text>
@@ -115,6 +142,61 @@ export default function RevealScreen() {
             </View>
           ) : null}
 
+          <View style={styles.reactionBox}>
+            <Text style={styles.reactionTitle}>React to the reveal</Text>
+            <Text style={styles.reactionSubtitle}>One day-scoped reaction. Optional note, not a chat thread.</Text>
+
+            {reactionFeedback ? (
+              <InlineMessage tone={reactionFeedback.includes('already') || reactionFeedback.includes('between') ? 'warning' : 'default'} text={reactionFeedback} />
+            ) : null}
+
+            {currentUserReaction ? (
+              <View style={styles.savedReaction}>
+                <Text style={styles.savedReactionTitle}>Your reaction is in: {reactionLabel(currentUserReaction.reaction_type)}</Text>
+                {currentUserReaction.note ? <Text style={styles.savedReactionNote}>{currentUserReaction.note}</Text> : null}
+              </View>
+            ) : (
+              <>
+                <View style={styles.reactionGrid}>
+                  {reactionOptions.map((option) => {
+                    const selected = option.value === reactionType;
+
+                    return (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => setReactionType(option.value)}
+                        style={[styles.reactionChip, selected ? styles.reactionChipSelected : null]}
+                      >
+                        <Text style={styles.reactionEmoji}>{option.emoji}</Text>
+                        <Text style={[styles.reactionLabel, selected ? styles.reactionLabelSelected : null]}>{option.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <TextField
+                  label="Optional reveal note"
+                  value={note}
+                  onChangeText={(value) => setNote(value.slice(0, 160))}
+                  multiline
+                  placeholder="Say the tiny thing the reveal made obvious."
+                  caption={`${noteLength}/160. Leave blank or use 12+ characters.`}
+                  error={hasInvalidNoteLength ? 'Leave it blank or write at least 12 characters.' : undefined}
+                />
+
+                <PrimaryButton label="Send reaction" onPress={handleSaveReaction} disabled={hasInvalidNoteLength} />
+              </>
+            )}
+
+            {partnerReaction ? (
+              <View style={styles.partnerReaction}>
+                <Text style={styles.noteLabel}>{partnerProfile?.display_name ?? 'Your partner'} reacted</Text>
+                <Text style={styles.partnerReactionText}>{reactionLabel(partnerReaction.reaction_type)}</Text>
+                {partnerReaction.note ? <Text style={styles.noteText}>{partnerReaction.note}</Text> : null}
+              </View>
+            ) : null}
+          </View>
+
           <PrimaryButton label="Mark reveal viewed" onPress={handleDone} />
         </SurfaceCard>
       )}
@@ -181,16 +263,12 @@ function formatScore(kind: RevealKind, score?: number) {
   return `${symbols[score - 1]} ${score}/5`;
 }
 
+function reactionLabel(reactionType: ReactionType) {
+  const option = reactionOptions.find((reaction) => reaction.value === reactionType);
+  return option ? `${option.emoji} ${option.label}` : reactionType;
+}
+
 const styles = StyleSheet.create({
-  backButton: {
-    alignSelf: 'flex-start',
-    marginBottom: spacing.lg,
-  },
-  backLabel: {
-    color: colors.primary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
   hero: {
     gap: spacing.sm,
     marginBottom: spacing.lg,
@@ -305,5 +383,83 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     lineHeight: 22,
+  },
+  reactionBox: {
+    backgroundColor: colors.message,
+    borderColor: colors.messageBorder,
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  reactionTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  reactionSubtitle: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  reactionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  reactionChip: {
+    alignItems: 'center',
+    backgroundColor: colors.field,
+    borderColor: colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexGrow: 1,
+    gap: 2,
+    minWidth: 86,
+    padding: spacing.sm,
+  },
+  reactionChipSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  reactionEmoji: {
+    fontSize: 22,
+  },
+  reactionLabel: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  reactionLabelSelected: {
+    color: colors.cardTextOnDark,
+  },
+  savedReaction: {
+    backgroundColor: colors.field,
+    borderColor: colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.md,
+  },
+  savedReactionTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  savedReactionNote: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  partnerReaction: {
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    gap: spacing.xs,
+    padding: spacing.md,
+  },
+  partnerReactionText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
   },
 });

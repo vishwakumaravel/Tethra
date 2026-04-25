@@ -34,6 +34,11 @@ type ButtonProps = {
   variant?: 'primary' | 'secondary';
 };
 
+type BackButtonProps = {
+  label?: string;
+  onPress: () => void;
+};
+
 type InlineMessageProps = {
   text: string;
   tone?: 'default' | 'warning' | 'danger';
@@ -93,6 +98,14 @@ export function PrimaryButton({ label, onPress, disabled, loading, variant = 'pr
           {label}
         </Text>
       )}
+    </Pressable>
+  );
+}
+
+export function BackButton({ label = 'Back', onPress }: BackButtonProps) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.backButton, pressed ? styles.buttonPressed : null]}>
+      <Text style={styles.backButtonLabel}>{`< ${label}`}</Text>
     </Pressable>
   );
 }
@@ -223,6 +236,21 @@ const styles = StyleSheet.create({
   buttonLabel: {
     fontSize: 16,
     fontWeight: '700',
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.secondaryButton,
+    borderColor: colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  backButtonLabel: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '900',
   },
   primaryButtonLabel: {
     color: colors.cardTextOnDark,

@@ -6,21 +6,41 @@ import { InlineMessage, PrimaryButton, Screen, SurfaceCard, TextField } from '@/
 import { useAuth } from '@/context/auth';
 import { useDailyLoop } from '@/context/daily-loop';
 import { useRelationship } from '@/context/relationship';
+import { getNextTierProgress, getTierProgressionNote } from '@/logic/tiers';
 import { DailyStatus } from '@/types/database';
 import { colors, spacing } from '@/theme/tokens';
+
+type HomeTab = 'activity' | 'rank' | 'ritual';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { profile, session, signOut } = useAuth();
   const { cancelInvite, couple, createInvite, isLoading, joinByCode, lastError, partnerProfile, refreshRelationship, relationshipState } =
     useRelationship();
-  const { currentUserCheckIn, currentUserPrediction, error, localDay, refreshToday, streak, todayReveal, todayStatus } = useDailyLoop();
+  const {
+    currentTier,
+    currentUserCheckIn,
+    currentUserPrediction,
+    error,
+    localDay,
+    pairedDaysCount,
+    partnerActivity,
+    refreshToday,
+    relationshipScore,
+    streak,
+    todayReveal,
+    todayStatus,
+    xp,
+  } = useDailyLoop();
   const [joinCode, setJoinCode] = React.useState('');
   const [feedback, setFeedback] = React.useState<string | null>(null);
+  const [selectedTab, setSelectedTab] = React.useState<HomeTab>('ritual');
 
   const normalizedJoinCode = joinCode.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
   const inviteExpiresAt = couple?.invite_expires_at ? new Date(couple.invite_expires_at) : null;
   const hasJoinCode = normalizedJoinCode.length === 6;
+  const tierProgress = getNextTierProgress(relationshipScore);
+  const tierProgressionNote = getTierProgressionNote(pairedDaysCount);
 
   const handleCreateInvite = async (regenerate = false) => {
     const result = await createInvite({ regenerate });
@@ -51,16 +71,27 @@ export default function HomeScreen() {
     });
   };
 
+  const handleShareRank = async () => {
+    const nextLine = tierProgress.nextTier ? `${tierProgress.pointsToNext} points from ${tierProgress.nextTier}.` : 'Top tier unlocked.';
+
+    await Share.share({
+      message: `We are ${currentTier} on Tethra 🏹\nScore: ${Math.round(relationshipScore)}/100 · ${pairedDaysCount} paired day${
+        pairedDaysCount === 1 ? '' : 's'
+      }\n${nextLine}`,
+      title: 'Share Tethra rank',
+    });
+  };
+
   return (
     <Screen>
       <View style={styles.header}>
         <View style={styles.headerCopy}>
-          <Text style={styles.kicker}>{relationshipState === 'linked' ? 'PHASE 3A' : 'PHASE 2'}</Text>
-          <Text style={styles.title}>{relationshipState === 'linked' ? "Today's ritual is ready." : 'Relationship linking is live.'}</Text>
+          <Text style={styles.kicker}>{relationshipState === 'linked' ? 'TODAY' : 'LINK UP'}</Text>
+          <Text style={styles.title}>{relationshipState === 'linked' ? 'Your ritual is ready.' : 'Start your shared space.'}</Text>
           <Text style={styles.subtitle}>
             {relationshipState === 'linked'
-              ? 'Check in, predict your partner, and unlock the reveal when both of you complete the day.'
-              : 'Create an invite code or join your partner to unlock the daily couple loop.'}
+              ? 'Check in. Predict. Reveal.'
+              : 'One invite code. Two people.'}
           </Text>
         </View>
 
@@ -69,14 +100,16 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      <SurfaceCard accent="rose">
-        <Text style={styles.cardTitle}>{profile?.display_name ?? 'Your profile'}</Text>
-        <View style={styles.summaryGrid}>
-          <SummaryChip label="Relationship state" value={relationshipState} />
-          <SummaryChip label="Partner" value={partnerProfile?.display_name ?? profile?.partner_status ?? 'unlinked'} />
-          <SummaryChip label="Identity" value={session?.user.email ?? session?.user.phone ?? 'Connected'} />
-        </View>
-      </SurfaceCard>
+      {relationshipState !== 'linked' ? (
+        <SurfaceCard accent="rose">
+          <Text style={styles.cardTitle}>{profile?.display_name ?? 'Your profile'}</Text>
+          <View style={styles.summaryGrid}>
+            <SummaryChip label="Relationship state" value={relationshipState} />
+            <SummaryChip label="Partner" value={partnerProfile?.display_name ?? profile?.partner_status ?? 'unlinked'} />
+            <SummaryChip label="Identity" value={session?.user.email ?? session?.user.phone ?? 'Connected'} />
+          </View>
+        </SurfaceCard>
+      ) : null}
 
       {feedback ? <InlineMessage tone="default" text={feedback} /> : null}
       {lastError ? <InlineMessage tone="warning" text={lastError.message} /> : null}
@@ -133,35 +166,94 @@ export default function HomeScreen() {
 
       {relationshipState === 'linked' ? (
         <>
-          <SurfaceCard accent="ink">
-            <Text style={styles.stateTitle}>Daily couple loop</Text>
-            <Text style={styles.stateBody}>Couple day {localDay ?? 'loading'} in {couple?.timezone ?? 'UTC'}</Text>
+          <View style={styles.tabBar}>
+            <HomeTabButton label="Ritual" selected={selectedTab === 'ritual'} onPress={() => setSelectedTab('ritual')} />
+            <HomeTabButton label="Rank" selected={selectedTab === 'rank'} onPress={() => setSelectedTab('rank')} />
+            <HomeTabButton label="Activity" selected={selectedTab === 'activity'} onPress={() => setSelectedTab('activity')} />
+          </View>
 
-            <View style={styles.darkGrid}>
-              <DarkMetric label="Current streak" value={`${streak.current}`} />
-              <DarkMetric label="Longest streak" value={`${streak.longest}`} />
-              <DarkMetric label="Today" value={statusLabel(todayStatus)} />
-            </View>
+          {selectedTab === 'ritual' ? (
+            <SurfaceCard accent="ink">
+              <Text style={styles.bigEmoji}>🕯️</Text>
+              <Text style={styles.stateTitle}>Today’s read</Text>
+              <Text style={styles.stateBody}>{localDay ?? 'Loading'} · {couple?.timezone ?? 'UTC'}</Text>
 
-            <View style={styles.partnerCard}>
-              <Text style={styles.partnerLabel}>Progress</Text>
-              <Text style={styles.partnerMeta}>
-                Check-in {currentUserCheckIn ? 'done' : 'open'} | Prediction {currentUserPrediction ? 'done' : 'open'} | Reveal{' '}
-                {todayReveal ? 'unlocked' : 'locked'}
-              </Text>
-            </View>
+              <View style={styles.darkGrid}>
+                <DarkMetric label="Current streak" value={`${streak.current}`} />
+                <DarkMetric label="Longest streak" value={`${streak.longest}`} />
+                <DarkMetric label="Today" value={statusLabel(todayStatus)} />
+              </View>
 
-            <DailyAction status={todayStatus} onRefresh={() => void refreshToday()} />
-          </SurfaceCard>
+              <View style={styles.partnerCard}>
+                <Text style={styles.partnerLabel}>Progress</Text>
+                <Text style={styles.partnerMeta}>
+                  Check-in {currentUserCheckIn ? 'done' : 'open'} | Prediction {currentUserPrediction ? 'done' : 'open'} | Reveal{' '}
+                  {todayReveal ? 'unlocked' : 'locked'}
+                </Text>
+              </View>
 
-          <SurfaceCard accent="rose">
-            <Text style={styles.cardTitle}>Partner signal</Text>
-            <Text style={styles.partnerLight}>
-              Linked with {partnerProfile?.display_name ?? 'your partner'}. Phase 3A keeps this focused on the daily ritual: no chat feed, no public
-              surface, just the paired reveal.
-            </Text>
-            <PrimaryButton label="Refresh relationship" onPress={() => void refreshRelationship()} variant="secondary" />
-          </SurfaceCard>
+              <DailyAction status={todayStatus} onRefresh={() => void refreshToday()} />
+            </SurfaceCard>
+          ) : null}
+
+          {selectedTab === 'rank' ? (
+            <SurfaceCard accent="ink">
+              <Text style={styles.bigEmoji}>🏹</Text>
+              <Text style={styles.stateTitle}>Your rank</Text>
+              <Text style={styles.stateBody}>Earned slowly. Shared together.</Text>
+
+              <View style={styles.tierCard}>
+                <Text style={styles.partnerLabel}>Current tier</Text>
+                <Text style={styles.tierValue}>{currentTier}</Text>
+                <Text style={styles.partnerMeta}>
+                  Score {Math.round(relationshipScore)}/100 | {xp} XP | {pairedDaysCount} paired day{pairedDaysCount === 1 ? '' : 's'}
+                </Text>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${tierProgress.percent}%` }]} />
+                </View>
+                <Text style={styles.partnerMeta}>
+                  {tierProgress.nextTier
+                    ? `${tierProgress.pointsToNext} points to ${tierProgress.nextTier}`
+                    : 'Top tier reached. Extremely suspicious, in a good way.'}
+                </Text>
+              </View>
+
+              <PrimaryButton label="Share rank" onPress={() => void handleShareRank()} />
+
+              <View style={styles.partnerCard}>
+                <Text style={styles.partnerLabel}>Slow on purpose</Text>
+                <Text style={styles.partnerMeta}>{tierProgressionNote}</Text>
+              </View>
+
+              <View style={styles.partnerCard}>
+                <Text style={styles.partnerLabel}>Coming later</Text>
+                <Text style={styles.partnerMeta}>
+                  Couple percentile, rank explanation, and richer history can become Pro depth.
+                </Text>
+              </View>
+            </SurfaceCard>
+          ) : null}
+
+          {selectedTab === 'activity' ? (
+            <SurfaceCard accent="rose">
+              <Text style={styles.cardTitle}>Partner activity</Text>
+              {partnerActivity.length > 0 ? (
+                <View style={styles.activityList}>
+                  {partnerActivity.map((activity) => (
+                    <View key={activity.label} style={styles.activityItem}>
+                      <Text style={styles.activityLabel}>{activity.label}</Text>
+                      <Text style={styles.activityDetail}>{activity.detail}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.partnerLight}>
+                  Linked with {partnerProfile?.display_name ?? 'your partner'}. Their check-in, prediction, and reveal reactions will show up here.
+                </Text>
+              )}
+              <PrimaryButton label="Refresh relationship" onPress={() => void refreshRelationship()} variant="secondary" />
+            </SurfaceCard>
+          ) : null}
         </>
       ) : null}
 
@@ -220,6 +312,14 @@ function DailyAction({ onRefresh, status }: { onRefresh: () => void; status: Dai
   return <PrimaryButton label="Waiting for partner. Refresh" onPress={onRefresh} variant="secondary" />;
 }
 
+function HomeTabButton({ label, onPress, selected }: { label: string; onPress: () => void; selected: boolean }) {
+  return (
+    <Pressable onPress={onPress} style={[styles.tabButton, selected ? styles.tabButtonSelected : null]}>
+      <Text style={[styles.tabButtonLabel, selected ? styles.tabButtonLabelSelected : null]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 function SummaryChip({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.summaryChip}>
@@ -269,14 +369,15 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: 32,
+    fontSize: 38,
     fontWeight: '800',
-    lineHeight: 38,
+    lineHeight: 43,
   },
   subtitle: {
     color: colors.muted,
-    fontSize: 15,
-    lineHeight: 23,
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 28,
   },
   settingsLink: {
     color: colors.primary,
@@ -288,6 +389,34 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     marginBottom: spacing.xs,
+  },
+  tabBar: {
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderRadius: 22,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    padding: spacing.xs,
+  },
+  tabButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    flex: 1,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  tabButtonSelected: {
+    backgroundColor: colors.ink,
+  },
+  tabButtonLabel: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  tabButtonLabelSelected: {
+    color: colors.cardTextOnDark,
   },
   summaryGrid: {
     gap: spacing.sm,
@@ -311,13 +440,17 @@ const styles = StyleSheet.create({
   },
   stateTitle: {
     color: colors.cardTextOnDark,
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 34,
+    fontWeight: '900',
   },
   stateBody: {
     color: colors.cardMutedOnDark,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 26,
+  },
+  bigEmoji: {
+    fontSize: 54,
   },
   dividerWrap: {
     alignItems: 'center',
@@ -379,6 +512,28 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     padding: spacing.md,
   },
+  tierCard: {
+    backgroundColor: colors.darkOverlay,
+    borderRadius: 22,
+    gap: spacing.xs,
+    padding: spacing.md,
+  },
+  tierValue: {
+    color: colors.highlight,
+    fontSize: 30,
+    fontWeight: '900',
+  },
+  progressTrack: {
+    backgroundColor: 'rgba(255, 248, 245, 0.16)',
+    borderRadius: 999,
+    height: 10,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    backgroundColor: colors.highlight,
+    borderRadius: 999,
+    height: '100%',
+  },
   partnerLabel: {
     color: colors.cardMutedOnDark,
     fontSize: 12,
@@ -395,5 +550,24 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 15,
     lineHeight: 23,
+  },
+  activityList: {
+    gap: spacing.sm,
+  },
+  activityItem: {
+    backgroundColor: colors.chip,
+    borderRadius: 18,
+    gap: spacing.xs,
+    padding: spacing.md,
+  },
+  activityLabel: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  activityDetail: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 19,
   },
 });

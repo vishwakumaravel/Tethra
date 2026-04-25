@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { InlineMessage, PrimaryButton, Screen, SurfaceCard, TextField } from '@/components/ui';
+import { BackButton, InlineMessage, PrimaryButton, Screen, SurfaceCard, TextField } from '@/components/ui';
 import { useAuth } from '@/context/auth';
 import { colors, spacing } from '@/theme/tokens';
 import { EmailAuthFormValues, emailAuthSchema } from '@/validation/forms';
@@ -45,9 +45,7 @@ export default function EmailAuthScreen() {
 
   return (
     <Screen>
-      <Pressable onPress={() => router.back()} style={styles.backButton}>
-        <Text style={styles.backLabel}>Back</Text>
-      </Pressable>
+      <BackButton onPress={() => router.back()} />
 
       <View style={styles.hero}>
         <Text style={styles.title}>{mode === 'sign-up' ? 'Create your Tethra account' : 'Welcome back'}</Text>
@@ -134,15 +132,6 @@ export default function EmailAuthScreen() {
 }
 
 const styles = StyleSheet.create({
-  backButton: {
-    alignSelf: 'flex-start',
-    marginBottom: spacing.lg,
-  },
-  backLabel: {
-    color: colors.primary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
   hero: {
     gap: spacing.sm,
     marginBottom: spacing.lg,

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { GestureResponderEvent, StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '@/theme/tokens';
 
@@ -18,6 +18,18 @@ const defaultSymbols: ScoreSymbols = ['😞', '🙁', '😐', '🙂', '😍'];
 
 export function ScorePicker({ highLabel, label, lowLabel, onChange, symbols, value }: ScorePickerProps) {
   const scaleSymbols = symbols ?? defaultSymbols;
+  const [trackWidth, setTrackWidth] = React.useState(0);
+  const fillPercent = ((value - 1) / 4) * 100;
+
+  const updateValueFromTouch = (event: GestureResponderEvent) => {
+    if (!trackWidth) {
+      return;
+    }
+
+    const nextRatio = Math.min(1, Math.max(0, event.nativeEvent.locationX / trackWidth));
+    const nextValue = Math.min(5, Math.max(1, Math.round(nextRatio * 4) + 1));
+    onChange(nextValue);
+  };
 
   return (
     <View style={styles.wrap}>
@@ -27,21 +39,44 @@ export function ScorePicker({ highLabel, label, lowLabel, onChange, symbols, val
           {scaleSymbols[value - 1]} {value}/5
         </Text>
       </View>
-      <View style={styles.options}>
-        {[1, 2, 3, 4, 5].map((score) => {
-          const selected = score === value;
-
-          return (
-            <Pressable
+      <View style={styles.sliderWrap}>
+        <View style={styles.symbolRow}>
+          {scaleSymbols.map((symbol, index) => (
+            <Text key={`${symbol}-${index}`} style={[styles.symbol, index + 1 === value ? styles.symbolSelected : null]}>
+              {symbol}
+            </Text>
+          ))}
+        </View>
+        <View
+          onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+          onMoveShouldSetResponder={() => true}
+          onResponderGrant={updateValueFromTouch}
+          onResponderMove={updateValueFromTouch}
+          onStartShouldSetResponder={() => true}
+          style={styles.track}
+        >
+          <View style={[styles.trackFill, { width: `${fillPercent}%` }]} />
+          {[1, 2, 3, 4, 5].map((score) => (
+            <View
               key={score}
-              onPress={() => onChange(score)}
-              style={[styles.option, selected ? styles.optionSelected : null]}
-            >
-              <Text style={styles.optionSymbol}>{scaleSymbols[score - 1]}</Text>
-              <Text style={[styles.optionText, selected ? styles.optionTextSelected : null]}>{score}</Text>
-            </Pressable>
-          );
-        })}
+              style={[
+                styles.stepDot,
+                score <= value ? styles.stepDotActive : null,
+                { left: `${((score - 1) / 4) * 100}%` },
+              ]}
+            />
+          ))}
+          <View style={[styles.thumb, { left: `${fillPercent}%` }]}>
+            <Text style={styles.thumbText}>{value}</Text>
+          </View>
+        </View>
+        <View style={styles.numberRow}>
+          {[1, 2, 3, 4, 5].map((score) => (
+            <Text key={score} style={[styles.number, score === value ? styles.numberSelected : null]}>
+              {score}
+            </Text>
+          ))}
+        </View>
       </View>
       <View style={styles.captionRow}>
         <Text style={styles.caption}>{lowLabel}</Text>
@@ -72,36 +107,83 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
   },
-  options: {
-    flexDirection: 'row',
-    gap: spacing.xs,
+  sliderWrap: {
+    gap: spacing.sm,
   },
-  option: {
+  symbolRow: {
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  symbol: {
+    fontSize: 22,
+    opacity: 0.45,
+  },
+  symbolSelected: {
+    fontSize: 32,
+    opacity: 1,
+  },
+  track: {
     backgroundColor: colors.chip,
     borderColor: colors.border,
-    borderRadius: 18,
+    borderRadius: 999,
     borderWidth: 1,
-    flex: 1,
-    gap: 2,
+    height: 36,
     justifyContent: 'center',
-    minHeight: 62,
-    paddingVertical: spacing.xs,
+    position: 'relative',
   },
-  optionSelected: {
+  trackFill: {
+    backgroundColor: colors.primary,
+    borderRadius: 999,
+    bottom: 0,
+    left: 0,
+    opacity: 0.28,
+    position: 'absolute',
+    top: 0,
+  },
+  stepDot: {
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 12,
+    marginLeft: -6,
+    position: 'absolute',
+    width: 12,
+  },
+  stepDotActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  optionSymbol: {
-    fontSize: 21,
+  thumb: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderColor: colors.card,
+    borderRadius: 999,
+    borderWidth: 3,
+    height: 44,
+    justifyContent: 'center',
+    marginLeft: -22,
+    position: 'absolute',
+    width: 44,
   },
-  optionText: {
-    color: colors.text,
+  thumbText: {
+    color: colors.cardTextOnDark,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  numberRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  number: {
+    color: colors.muted,
     fontSize: 12,
     fontWeight: '800',
   },
-  optionTextSelected: {
-    color: colors.cardTextOnDark,
+  numberSelected: {
+    color: colors.primary,
+    fontSize: 15,
   },
   captionRow: {
     flexDirection: 'row',

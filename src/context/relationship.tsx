@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { useAuth } from '@/context/auth';
+import { trackEvent } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 import { Couple, Profile, RelationshipErrorCode, RelationshipState } from '@/types/database';
 
@@ -30,6 +31,7 @@ type RelationshipContextValue = {
   cancelInvite: () => Promise<RelationshipActionResult>;
   couple: Couple | null;
   createInvite: (options?: { regenerate?: boolean }) => Promise<RelationshipActionResult>;
+  endRelationship: () => Promise<RelationshipActionResult>;
   isLoading: boolean;
   lastError: RelationshipError | null;
   partnerProfile: Profile | null;
@@ -176,6 +178,38 @@ export function RelationshipProvider({ children }: { children: React.ReactNode }
     void refreshRelationship();
   }, [isReady, profile?.current_couple_id, profile?.partner_status, refreshRelationship, session?.user?.id]);
 
+  React.useEffect(() => {
+    const userId = session?.user?.id;
+
+    if (!userId || !hasCompletedProfile) {
+      return;
+    }
+
+    const refreshLinkedState = () => {
+      void refreshProfile();
+      void refreshRelationship();
+    };
+
+    const channel = supabase
+      .channel(`relationship:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', filter: `user_1_id=eq.${userId}`, schema: 'public', table: 'couples' },
+        refreshLinkedState,
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', filter: `user_2_id=eq.${userId}`, schema: 'public', table: 'couples' },
+        refreshLinkedState,
+      )
+      .on('postgres_changes', { event: '*', filter: `id=eq.${userId}`, schema: 'public', table: 'profiles' }, refreshLinkedState)
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [hasCompletedProfile, refreshProfile, refreshRelationship, session?.user?.id]);
+
   const createInvite = async ({ regenerate = false }: { regenerate?: boolean } = {}): Promise<RelationshipActionResult> => {
     const requestedTimezone = getDeviceTimezone();
 
@@ -221,6 +255,12 @@ export function RelationshipProvider({ children }: { children: React.ReactNode }
       setRelationshipState('link_error');
       return { ok: false, ...nextError };
     }
+
+    void trackEvent('invite_created', {
+      couple_id: result.couple_id,
+      relationship_state: regenerate ? 'invite_regenerated' : 'invite_sent',
+      timezone: result.timezone,
+    });
 
     return {
       ok: true,
@@ -274,6 +314,15 @@ export function RelationshipProvider({ children }: { children: React.ReactNode }
     await refreshProfile();
     await refreshRelationship();
 
+    void trackEvent('invite_joined', {
+      couple_id: result.couple_id,
+      relationship_state: 'linked',
+    });
+    void trackEvent('couple_linked', {
+      couple_id: result.couple_id,
+      relationship_state: 'linked',
+    });
+
     return {
       ok: true,
       message: 'You are linked. Your shared space is ready.',
@@ -316,11 +365,52 @@ export function RelationshipProvider({ children }: { children: React.ReactNode }
     };
   };
 
+  const endRelationship = async (): Promise<RelationshipActionResult> => {
+    setIsLoading(true);
+
+    const { data, error } = await supabase.rpc('end_current_relationship');
+
+    if (error) {
+      const fallback = {
+        code: 'unknown' as RelationshipErrorCode,
+        message: 'We could not reset this relationship right now.',
+      };
+
+      setLastError(fallback);
+      setRelationshipState('link_error');
+      setIsLoading(false);
+      return { ok: false, ...fallback };
+    }
+
+    const result = getEndRelationshipRpcRow(data);
+
+    await refreshProfile();
+    await refreshRelationship();
+    setIsLoading(false);
+
+    if (!result || !result.ok) {
+      const fallback = {
+        code: result?.error_code ?? 'unknown',
+        message: result?.error_message ?? 'We could not reset this relationship right now.',
+      };
+
+      setLastError(fallback);
+      setRelationshipState('link_error');
+      return { ok: false, ...fallback };
+    }
+
+    return {
+      ok: true,
+      message: 'Relationship reset. Both accounts are unlinked.',
+    };
+  };
+
   const value = React.useMemo<RelationshipContextValue>(
     () => ({
       cancelInvite,
       couple,
       createInvite,
+      endRelationship,
       isLoading,
       joinByCode,
       lastError,
@@ -345,6 +435,14 @@ export function useRelationship() {
 }
 
 function getRpcRow(data: RpcResult[] | null) {
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  return data[0];
+}
+
+function getEndRelationshipRpcRow(data: Array<{ error_code: RelationshipErrorCode | null; error_message: string | null; ok: boolean }> | null) {
   if (!data || data.length === 0) {
     return null;
   }

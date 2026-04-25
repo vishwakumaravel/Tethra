@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { InlineMessage, PrimaryButton, Screen, SurfaceCard, TextField } from '@/components/ui';
+import { BackButton, InlineMessage, PrimaryButton, Screen, SurfaceCard, TextField } from '@/components/ui';
 import { useAuth } from '@/context/auth';
 import { colors, spacing } from '@/theme/tokens';
 import { PhoneCodeValues, PhoneRequestValues, phoneCodeSchema, phoneRequestSchema } from '@/validation/forms';
@@ -68,9 +68,7 @@ export default function PhoneAuthScreen() {
 
   return (
     <Screen>
-      <Pressable onPress={() => router.back()} style={styles.backButton}>
-        <Text style={styles.backLabel}>Back</Text>
-      </Pressable>
+      <BackButton onPress={() => router.back()} />
 
       <View style={styles.hero}>
         <Text style={styles.title}>Phone-first mobile sign in</Text>
@@ -149,15 +147,6 @@ export default function PhoneAuthScreen() {
 }
 
 const styles = StyleSheet.create({
-  backButton: {
-    alignSelf: 'flex-start',
-    marginBottom: spacing.lg,
-  },
-  backLabel: {
-    color: colors.primary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
   hero: {
     gap: spacing.sm,
     marginBottom: spacing.lg,

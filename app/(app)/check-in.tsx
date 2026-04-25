@@ -1,9 +1,9 @@
 import { useRouter } from 'expo-router';
 import * as React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { ScorePicker } from '@/components/ritual';
-import { InlineMessage, PrimaryButton, Screen, SurfaceCard, TextField } from '@/components/ui';
+import { BackButton, InlineMessage, PrimaryButton, Screen, SurfaceCard, TextField } from '@/components/ui';
 import { useDailyLoop } from '@/context/daily-loop';
 import { colors, spacing } from '@/theme/tokens';
 
@@ -37,9 +37,7 @@ export default function CheckInScreen() {
 
   return (
     <Screen>
-      <Pressable onPress={() => router.back()} style={styles.backButton}>
-        <Text style={styles.backLabel}>Back</Text>
-      </Pressable>
+      <BackButton onPress={() => router.back()} />
 
       <View style={styles.hero}>
         <Text style={styles.kicker}>TODAY</Text>
@@ -98,15 +96,6 @@ export default function CheckInScreen() {
 }
 
 const styles = StyleSheet.create({
-  backButton: {
-    alignSelf: 'flex-start',
-    marginBottom: spacing.lg,
-  },
-  backLabel: {
-    color: colors.primary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
   hero: {
     gap: spacing.sm,
     marginBottom: spacing.lg,

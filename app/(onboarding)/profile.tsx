@@ -3,7 +3,7 @@ import * as React from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { InlineMessage, PrimaryButton, Screen, SurfaceCard, TextField } from '@/components/ui';
+import { BackButton, InlineMessage, PrimaryButton, Screen, SurfaceCard, TextField } from '@/components/ui';
 import { useAuth } from '@/context/auth';
 import { colors, spacing } from '@/theme/tokens';
 import { ProfileFormValues, profileSchema } from '@/validation/forms';
@@ -31,6 +31,8 @@ export default function ProfileOnboardingScreen() {
 
   return (
     <Screen>
+      <BackButton label="Back to sign in" onPress={() => void signOut()} />
+
       <View style={styles.hero}>
         <Text style={styles.title}>Before you link up, let’s shape your profile.</Text>
         <Text style={styles.subtitle}>
